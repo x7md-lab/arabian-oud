@@ -49,7 +49,7 @@ const AudioVisualizer = forwardRef((props, ref) => {
 
   useEffect(() => {
     // Create Audio element programmatically to avoid issues with React Strict Mode
-    const audioPlayer = new Audio('/sv-boarding.mp3');
+    const audioPlayer = new Audio('./sv-boarding.mp3');
     audioPlayer.preload = 'none';
     audioPlayer.crossOrigin = 'anonymous';
     audioPlayer.loop = true;

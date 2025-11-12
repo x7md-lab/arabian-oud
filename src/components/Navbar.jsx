@@ -7,7 +7,7 @@ const Navbar = ({ audioVisualizerRef, showVisualizerOnly }) => {
       <div className="mx-auto grid grid-cols-1">
         <div className={`transition-all duration-300 ${showVisualizerOnly ? 'h-0 overflow-hidden' : 'h-32'}`}>
             <div className="flex items-center gap-1.5 justify-center text-center">
-              <img src="/arabian-oud.svg" alt="الشعار" className="h-32" />
+              <img src="arabian-oud.svg" alt="الشعار" className="h-32" />
             </div>
         </div>
         <div className="w-full">
