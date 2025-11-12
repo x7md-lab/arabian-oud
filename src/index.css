@@ -1,0 +1,29 @@
+/* this because we are using tailwind v4 */
+@import "tailwindcss";
+
+html {
+  font-family: 'Vazirmatn', sans-serif;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #28170e; /* Brand dark background */
+  color: #f1eedb; /* Brand primary text */
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80"><path fill="%23f1eedb" fill-opacity="0.05" d="M0 0h80v80H0zM20 20h40v40H20z"></path></svg>');
+}
+
+/* Style native dialog backdrop */
+dialog::backdrop {
+  background-color: rgba(40, 23, 14, 0.6); /* Brand-tinted backdrop */
+}
+
+/* Force center for native dialog when open */
+dialog[open] {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+}

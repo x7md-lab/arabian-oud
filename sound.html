@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Audio Visualizer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom style for the SVG path */
+        #svgPath {
+            stroke-width: 3px;
+            /* A slightly longer transition helps with the smooth feeling */
+            transition: all 0.08s ease; 
+        }
+        
+        /* Hide the default file input */
+        #fileInput {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans flex items-center justify-center h-full p-4">
+
+    <div class="w-full max-w-3xl flex flex-col items-center space-y-6">
+        <h1 class="text-3xl font-bold text-white">Audio Visualizer</h1>
+        <p id="fileName" class="text-gray-400">Load a file or play the default audio</p>
+
+        <!-- SVG container for the visualization -->
+        <svg id="visualizerSvg" width="100%" height="300" class="bg-gray-800 rounded-lg shadow-inner w-full">
+            <!-- The path that will be drawn -->
+            <path id="svgPath" stroke="url(#gradient)" fill="none"></path>
+            
+            <!-- Define a gradient for the stroke -->
+            <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:#34d399; stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#3b82f6; stop-opacity:1" />
+                </linearGradient>
+            </defs>
+        </svg>
+
+        <!-- Controls -->
+        <div class="flex flex-wrap justify-center gap-4">
+            <!-- File Input -->
+            <input type="file" id="fileInput">
+            <label for="fileInput" class="cursor-pointer px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-medium text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all duration-200">
+                Load Audio File
+            </label>
+
+            <button id="playButton" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
+                Play
+            </button>
+            <button id="toggleButton" class="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200">
+                Show Frequency
+            </button>
+        </div>
+
+        <!-- The Audio Element -->
+        <audio 
+            id="audioPlayer" 
+            src="https://actions.google.com/sounds/v1/ambiences/arcade_room.ogg" 
+            crossorigin="anonymous"
+            loop>
+        </audio>
+
+        <!-- A message box for errors or info -->
+        <div id="messageBox" class="hidden p-4 bg-red-800 text-white rounded-lg"></div>
+
+    </div>
+
+    <script>
+        // Get all the necessary HTML elements
+        const playButton = document.getElementById('playButton');
+        const toggleButton = document.getElementById('toggleButton');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const svg = document.getElementById('visualizerSvg');
+        const svgPath = document.getElementById('svgPath');
+        const messageBox = document.getElementById('messageBox');
+        const fileInput = document.getElementById('fileInput');
+        const fileNameDisplay = document.getElementById('fileName');
+
+        // Audio API variables
+        let audioContext;
+        let analyser;
+        let source;
+        let dataArray;
+        let bufferLength;
+
+        // Smoothing factor for a "heavier" feel
+        let smoothedDataArray;
+        const smoothingFactor = 0.92; // High smoothing
+
+        // State variables
+        let isPlaying = false;
+        let isFrequencyView = false; 
+        let isInitialized = false;
+        let currentFileUrl = null; 
+
+        // 1. Setup the Audio Context and Analyser
+        function setupAudioContext() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                source = audioContext.createMediaElementSource(audioPlayer);
+                analyser = audioContext.createAnalyser(); 
+                
+                analyser.fftSize = 1024; 
+                analyser.smoothingTimeConstant = 0.8;
+                
+                bufferLength = analyser.frequencyBinCount; 
+                dataArray = new Uint8Array(bufferLength);
+                
+                // Initialize smoothedDataArray with 128 (silence)
+                smoothedDataArray = new Uint8Array(bufferLength);
+                smoothedDataArray.fill(128); 
+                
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+                
+                isInitialized = true;
+                console.log("Audio context initialized. Buffer length:", bufferLength);
+            } catch (e) {
+                console.error("Error setting up Web Audio API:", e);
+                showMessage("Error: This browser does not support the Web Audio API.");
+            }
+        }
+
+        // 2. Handle File Input
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            
+            if (file) {
+                if (currentFileUrl) {
+                    URL.revokeObjectURL(currentFileUrl);
+                }
+                currentFileUrl = URL.createObjectURL(file);
+                audioPlayer.src = currentFileUrl;
+                audioPlayer.loop = true; 
+                fileNameDisplay.textContent = file.name;
+
+                if (isPlaying) {
+                    audioPlayer.pause();
+                    isPlaying = false; 
+                    playButton.textContent = 'Play';
+                }
+                
+                if (smoothedDataArray) {
+                    smoothedDataArray.fill(128);
+                }
+
+                if (!file.type.startsWith('audio/')) {
+                    showMessage("Warning: This may not be an audio file. Playback might fail.");
+                } else {
+                    messageBox.classList.add('hidden');
+                }
+            }
+        });
+
+        // 3. Handle Play/Pause
+        playButton.addEventListener('click', () => {
+            if (!isInitialized) {
+                setupAudioContext();
+            }
+
+            if (!isInitialized) {
+                showMessage("Could not initialize audio. Please refresh and try again.");
+                return;
+            }
+
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            if (isPlaying) {
+                audioPlayer.pause();
+                playButton.textContent = 'Play';
+                isPlaying = false; 
+            } else {
+                audioPlayer.play().then(() => {
+                    messageBox.classList.add('hidden'); 
+                }).catch(e => {
+                    console.error("Error playing audio:", e);
+                    showMessage(`Error: Could not play file. Is it a valid audio file? (${e.message})`);
+                    isPlaying = false; 
+                    playButton.textContent = 'Play';
+                });
+
+                playButton.textContent = 'Pause';
+                isPlaying = true; 
+                
+                draw(); // Start the animation loop
+            }
+        });
+
+        // 4. Handle Toggling View
+        toggleButton.addEventListener('click', () => {
+            isFrequencyView = !isFrequencyView;
+            if (isFrequencyView) {
+                toggleButton.textContent = 'Show Waveform';
+            } else {
+                toggleButton.textContent = 'Show Frequency';
+            }
+        });
+
+        // 5. The Drawing Loop
+        function draw() {
+            if (!isPlaying) { 
+                return; 
+            }
+
+            requestAnimationFrame(draw); 
+
+            const svgWidth = svg.clientWidth;
+            const svgHeight = svg.clientHeight;
+            let pathD = ""; 
+
+            if (isFrequencyView) {
+                // --- FREQUENCY BARS (Tone) ---
+                analyser.getByteFrequencyData(dataArray);
+
+                pathD = `M 0,0`; 
+                const barCount = bufferLength * 0.6; 
+                const barWidth = svgWidth / barCount;
+                let x = 0;
+                const freqThreshold = 10; // Noise threshold
+
+                for (let i = 0; i < barCount; i++) {
+                    let barHeight = 0; // Default to 0
+                    if(dataArray[i] > freqThreshold) {
+                         barHeight = (dataArray[i] / 255) * svgHeight;
+                    }
+                    pathD += ` L ${x},${barHeight}`;
+                    x += barWidth;
+                }
+                pathD += ` L ${svgWidth},0`; 
+
+            } else {
+                // --- WAVEFORM (Waves) ---
+                // This is the simplified, stable logic
+                
+                // 1. Get raw data
+                analyser.getByteTimeDomainData(dataArray); 
+
+                // 2. Smooth the data
+                for (let i = 0; i < bufferLength; i++) {
+                    smoothedDataArray[i] = (smoothedDataArray[i] * smoothingFactor) + (dataArray[i] * (1 - smoothingFactor));
+                }
+
+                // 3. Build the path
+                pathD = `M 0,0`;
+                
+                const pointsToDraw = bufferLength; 
+                const sliceWidth = svgWidth / (pointsToDraw - 1); 
+                let x = 0;
+
+                for (let i = 0; i < pointsToDraw; i++) { // <-- Fixed typo here
+                    const smoothVal = smoothedDataArray[i]; // 0-255
+                    let y = 0; // Default to the top line (0)
+
+                    // 128 is the "silence" line.
+                    // Only draw if the value is *below* silence.
+                    if (smoothVal < 128) {
+                        // 'downwardness' maps the 0-127 range to a 0.0-1.0 range
+                        const downwardness = (128 - smoothVal) / 128.0; 
+                        y = downwardness * svgHeight;
+                    }
+                    // If smoothVal >= 128, y stays 0, drawing the straight top line.
+                    
+                    pathD += ` L ${x.toFixed(2)},${y.toFixed(2)}`;
+                    x += sliceWidth;
+                }
+                pathD += ` L ${svgWidth},0`; // Finish at the top-right
+            }
+
+            // 6. Update the SVG Path
+            svgPath.setAttribute('d', pathD);
+        }
+
+        // Utility to show messages
+        function showMessage(message) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden');
+        }
+        
+        // When audio ends naturally (if not looping)
+        audioPlayer.addEventListener('ended', () => {
+            isPlaying = false;
+            playButton.textContent = 'Play';
+        });
+
+    </script>
+</body>
+</html>
